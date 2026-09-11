@@ -1,84 +1,133 @@
--- `table`.admin definition
+CREATE TABLE ADMIN (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-CREATE TABLE `admin` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `username` varchar(50) NOT NULL,
-  `password` varchar(255) NOT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+CREATE TABLE CUSTOMER (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    nama VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    no_hp VARCHAR(20),
+    password VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE PRODUK (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    nama VARCHAR(100) NOT NULL,
+    kategori VARCHAR(50),
+    harga DECIMAL(10,2) NOT NULL,
+    stok INT NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE PESANAN (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    customer_id INT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    total_bayar DECIMAL(10,2) NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES CUSTOMER(id)
+);
+
+CREATE TABLE DETAIL_PESANAN (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    pesanan_id INT NOT NULL,
+    produk_id INT NOT NULL,
+    jumlah INT NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (pesanan_id) REFERENCES PESANAN(id),
+    FOREIGN KEY (produk_id) REFERENCES PRODUK(id)
+);
+
+CREATE TABLE STOK_LOG (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    produk_id INT NOT NULL,
+    admin_id INT NULL,
+    perubahan INT NOT NULL,
+    alasan VARCHAR(100),
+    waktu DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (produk_id) REFERENCES PRODUK(id),
+    FOREIGN KEY (admin_id) REFERENCES ADMIN(id)
+);
+
+# data dummy
+
+INSERT INTO ADMIN (username, password) VALUES
+('busari', 'hash_password_admin');
+
+INSERT INTO CUSTOMER (nama, email, no_hp, password) VALUES
+('Andi', 'andi@email.com', '0812xxxxxxx', 'hash_password_andi');
+
+INSERT INTO PRODUK (id, nama, kategori, harga, stok) VALUES
+(1, 'Indomie Goreng', 'Makanan Instan', 3000, 50),
+(2, 'Aqua Botol 600ml', 'Minuman', 5000, 30),
+(3, 'Kecap ABC 220ml', 'Bumbu Dapur', 9000, 44);
+
+#function
+CREATE FUNCTION fn_cek_stok_cukup(
+    p_produk_id INT,
+    p_jumlah_diminta INT
+)
+RETURNS BOOLEAN
+DETERMINISTIC
+READS SQL DATA
+BEGIN
+    DECLARE v_stok_tersedia INT;
+
+    SELECT stok INTO v_stok_tersedia
+      FROM PRODUK
+     WHERE id = p_produk_id;
+
+    IF v_stok_tersedia IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN v_stok_tersedia >= p_jumlah_diminta;
+END;
+
+#prosedur
+CREATE PROCEDURE sp_buat_pesanan (
+    IN p_customer_id INT,
+    IN p_produk_id INT,
+    IN p_jumlah INT,
+    OUT p_pesanan_id INT,
+    OUT p_pesan VARCHAR(255)
+)
+BEGIN
+    DECLARE v_harga DECIMAL(10,2);
+    DECLARE v_total DECIMAL(10,2);
+
+    IF NOT fn_cek_stok_cukup(p_produk_id, p_jumlah) THEN
+        SET p_pesanan_id = NULL;
+        SET p_pesan = 'Stok tidak cukup untuk produk ini.';
+    ELSE
+        SELECT harga INTO v_harga FROM PRODUK WHERE id = p_produk_id;
+        SET v_total = v_harga * p_jumlah;
+
+        INSERT INTO PESANAN (customer_id, status, total_bayar, created_at)
+        VALUES (p_customer_id, 'pending', v_total, NOW());
+
+        SET p_pesanan_id = LAST_INSERT_ID();
+
+        INSERT INTO DETAIL_PESANAN (pesanan_id, produk_id, jumlah, subtotal)
+        VALUES (p_pesanan_id, p_produk_id, p_jumlah, v_total);
+
+        SET p_pesan = CONCAT('Pesanan berhasil dibuat dengan id ', p_pesanan_id,
+                              ', total Rp ', v_total);
+    END IF;
+END;
 
 
--- `table`.customer definition
+CALL sp_buat_pesanan(1, 1, 2, @pesanan_id, @pesan);
+SELECT @pesanan_id, @pesan;
 
-CREATE TABLE `customer` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `nama` varchar(100) NOT NULL,
-  `email` varchar(100) NOT NULL,
-  `no_hp` varchar(20) DEFAULT NULL,
-  `password` varchar(255) NOT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+CALL sp_buat_pesanan(1, 2, 9999, @pesanan_id2, @pesan2);
+SELECT @pesanan_id2, @pesan2;
 
+SELECT fn_cek_stok_cukup(1, 5) AS cukup;
 
--- `table`.produk definition
-
-CREATE TABLE `produk` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `nama` varchar(100) NOT NULL,
-  `kategori` varchar(50) DEFAULT NULL,
-  `harga` decimal(10,2) NOT NULL,
-  `stok` int(11) NOT NULL DEFAULT 0,
-  `created_at` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-
--- `table`.pesanan definition
-
-CREATE TABLE `pesanan` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `customer_id` int(11) NOT NULL,
-  `status` varchar(20) NOT NULL DEFAULT 'pending',
-  `total_bayar` decimal(10,2) NOT NULL DEFAULT 0.00,
-  `created_at` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `customer_id` (`customer_id`),
-  CONSTRAINT `pesanan_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customer` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-
--- `table`.stok_log definition
-
-CREATE TABLE `stok_log` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `produk_id` int(11) NOT NULL,
-  `admin_id` int(11) DEFAULT NULL,
-  `perubahan` int(11) NOT NULL,
-  `alasan` varchar(100) DEFAULT NULL,
-  `waktu` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `produk_id` (`produk_id`),
-  KEY `admin_id` (`admin_id`),
-  CONSTRAINT `stok_log_ibfk_1` FOREIGN KEY (`produk_id`) REFERENCES `produk` (`id`),
-  CONSTRAINT `stok_log_ibfk_2` FOREIGN KEY (`admin_id`) REFERENCES `admin` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
-
--- `table`.detail_pesanan definition
-
-CREATE TABLE `detail_pesanan` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `pesanan_id` int(11) NOT NULL,
-  `produk_id` int(11) NOT NULL,
-  `jumlah` int(11) NOT NULL,
-  `subtotal` decimal(10,2) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `pesanan_id` (`pesanan_id`),
-  KEY `produk_id` (`produk_id`),
-  CONSTRAINT `detail_pesanan_ibfk_1` FOREIGN KEY (`pesanan_id`) REFERENCES `pesanan` (`id`),
-  CONSTRAINT `detail_pesanan_ibfk_2` FOREIGN KEY (`produk_id`) REFERENCES `produk` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+SELECT * FROM PESANAN;
+SELECT * FROM DETAIL_PESANAN;
