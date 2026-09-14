@@ -59,7 +59,7 @@ INSERT INTO ADMIN (username, password) VALUES
 ('busari', 'hash_password_admin');
 
 INSERT INTO CUSTOMER (nama, email, no_hp, password) VALUES
-('Andi', 'andi@email.com', '0812xxxxxxx', 'hash_password_andi');
+('sucipto', 'ggs@email.com', '089921993213', 'supri123');
 
 INSERT INTO PRODUK (id, nama, kategori, harga, stok) VALUES
 (1, 'Indomie Goreng', 'Makanan Instan', 3000, 50),
@@ -67,12 +67,14 @@ INSERT INTO PRODUK (id, nama, kategori, harga, stok) VALUES
 (3, 'Kecap ABC 220ml', 'Bumbu Dapur', 9000, 44);
 
 #function
+drop function if exists fn_cek_stok_cukup;
+
 CREATE FUNCTION fn_cek_stok_cukup(
     p_produk_id INT,
     p_jumlah_diminta INT
 )
 RETURNS BOOLEAN
-DETERMINISTIC
+not DETERMINISTIC
 READS SQL DATA
 BEGIN
     DECLARE v_stok_tersedia INT;
@@ -121,13 +123,24 @@ BEGIN
 END;
 
 
-CALL sp_buat_pesanan(1, 1, 2, @pesanan_id, @pesan);
+CALL sp_buat_pesanan(2, 2, 2, @pesanan_id, @pesan);
 SELECT @pesanan_id, @pesan;
 
-CALL sp_buat_pesanan(1, 2, 9999, @pesanan_id2, @pesan2);
+CALL sp_buat_pesanan(3, 2, 5, @pesanan_id2, @pesan2);
 SELECT @pesanan_id2, @pesan2;
 
-SELECT fn_cek_stok_cukup(1, 5) AS cukup;
+select
+if(fn_cek_stok_cukup(1, 5), 'stock cukup', 'stock kurang') AS Stock;
 
-SELECT * FROM PESANAN;
-SELECT * FROM DETAIL_PESANAN;
+SELECT customer_id, status, from PESANAN;
+
+SELECT CUSTOMER.nama, DETAIL_PESANAN.produk_id, DETAIL_PESANAN.jumlah, DETAIL_PESANAN.subtotal, PRODUK.nama, PESANAN.status from CUSTOMER
+join PESANAN on CUSTOMER.id = PESANAN.customer_id
+join DETAIL_PESANAN on PESANAN.id = DETAIL_PESANAN.pesanan_ID
+join PRODUK on PRODUK.id = DETAIL_PESANAN.produk_id;
+
+select DETAIL_PESANAN.subtotal, DETAIL_PESANAN.jumlah from CUSTOMER
+join PESANAN on CUSTOMER.id = PESANAN.customer_id
+join DETAIL_PESANAN on PESANAN.id = DETAIL_PESANAN.pesanan_ID;
+
+CALL sp_buat_pesanan(2, 2, 2, @pesanan_id, @pesan);
